@@ -1,0 +1,68 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+/e2e/.auth
+
+# Production
+dist
+dist-ssr
+build
+
+# Vite/Next.js
+.vite
+.next
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# Vercel
+.vercel
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary files
+tmp/
+temp/
+scratch/
+
+# ──────────────────────────────────────────────────────────────────────────
+# Folder laporan TA — berisi docx, script generator, diagram, dsb.
+# TIDAK termasuk dalam deploy/push ke git repo aplikasi.
+# ──────────────────────────────────────────────────────────────────────────
+laporan/
+arsitektur/
+PPTX/
+*.docx
+*.pptx
+~$*
