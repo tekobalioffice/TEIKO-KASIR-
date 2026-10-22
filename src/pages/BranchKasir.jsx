@@ -54,8 +54,11 @@ export default function BranchKasir() {
     })();
   }, []);
 
-  const categories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))], [products]);
-  const visibleProducts = useMemo(() => products.filter(p => p.category === activeCategory), [products, activeCategory]);
+  // Produk tanpa kategori (null/kosong di Data Master) dulu hilang total — tidak nongol
+  // di tab mana pun. Sekarang dikumpulkan di tab "Lainnya" biar tetap kejual.
+  const categoryOf = (p) => p.category || 'Lainnya';
+  const categories = useMemo(() => [...new Set(products.map(categoryOf))], [products]);
+  const visibleProducts = useMemo(() => products.filter(p => categoryOf(p) === activeCategory), [products, activeCategory]);
 
   const priceFor = (product) => {
     if (channel !== 'offline') {
