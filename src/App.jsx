@@ -59,6 +59,7 @@ import GudangLayout from './layouts/GudangLayout';
 // Pages
 import Login from './pages/Login';
 import BranchPOS from './pages/BranchPOS';
+import BranchKasir from './pages/BranchKasir';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminStaff from './pages/AdminStaff';
 import AdminProducts from './pages/AdminProducts';
@@ -149,6 +150,7 @@ export default function App() {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="pos" element={<BranchPOS />} />
+            <Route path="kasir" element={<BranchKasir />} />
             <Route path="riwayat-penjualan" element={<AdminPOS />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="stock" element={<AdminStock />} />
@@ -175,6 +177,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="pos" />} />
             <Route path="pos" element={<BranchPOS />} />
+            <Route path="kasir" element={<BranchKasir />} />
           </Route>
 
           {/* Gudang Routes */}

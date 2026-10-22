@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Icon from '../components/Icon';
 import BranchStockDrawer from '../components/BranchStockDrawer';
@@ -52,8 +52,21 @@ export default function BranchLayout() {
           <img src="/logo.png" alt="TEIKO" style={{ height: '28px', objectFit: 'contain' }} />
           <span className="text-muted">|</span>
           <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{currentBranch || '—'}</span>
+          <span className="text-muted">|</span>
+          <nav style={{ display: 'flex', gap: '0.3rem' }}>
+            <NavLink to="/branch/kasir" style={({ isActive }) => ({
+              padding: '0.35rem 0.75rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem',
+              textDecoration: 'none', color: isActive ? '#fff' : 'var(--text-main)',
+              background: isActive ? 'var(--primary)' : 'transparent',
+            })}>Kasir</NavLink>
+            <NavLink to="/branch/pos" style={({ isActive }) => ({
+              padding: '0.35rem 0.75rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem',
+              textDecoration: 'none', color: isActive ? '#fff' : 'var(--text-main)',
+              background: isActive ? 'var(--primary)' : 'transparent',
+            })}>Opname</NavLink>
+          </nav>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {/* Stock Button */}
           <button
@@ -92,7 +105,7 @@ export default function BranchLayout() {
       />
 
       {/* Main Content */}
-      <main style={{ flex: 1, padding: '1rem', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
+      <main style={{ flex: 1, padding: '1rem', maxWidth: '1150px', margin: '0 auto', width: '100%' }}>
         <Outlet context={{ setCurrentBranch, setLivePorsiSisa, porsiTransfers, setPorsiTransfers, setLiveSafetyStock, stockRefreshKey }} />
       </main>
     </div>
