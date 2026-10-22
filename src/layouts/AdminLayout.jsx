@@ -59,6 +59,10 @@ export default function AdminLayout() {
             <Icon name="dashboard" size={18} /> Dashboard
           </Link>
           
+          <Link to="/admin/kasir" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
+            <Icon name="cart" size={18} /> Kasir
+          </Link>
+
           {!isOwner && (
             <Link to="/admin/pos" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
               <Icon name="file" size={18} /> Input Penjualan
