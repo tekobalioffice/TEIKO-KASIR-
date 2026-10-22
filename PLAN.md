@@ -19,8 +19,17 @@ baru (`uuvbdvcwphptbzrqvsja`), bukan punya produksi.
       branch_inventory, sales_reports, stock_restock_log, pending_stock_actions,
       stock_distributions, profiles, warehouse_inventory), sudah dicocokkan ke
       kolom asli lewat screenshot Table Editor. RLS: authenticated full access.
-- [ ] **Belum dijalankan ke project Supabase baru.** Schema.sql baru ditulis,
-      belum di-run di SQL Editor. Tanpa ini, app tidak bisa login/kerja sama sekali.
+- [x] `schema.sql` + `trigger_current_qty.sql` + `migrations_kasir.sql` sudah
+      dijalankan di project Supabase baru — 14 tabel ada, trigger terbukti jalan.
+- [x] Seed data (`scripts/seed-dev.mjs`): 1 admin (`teko.balioffice1@gmail.com`,
+      role admin, cocokkan ke akun Auth yang sama), outlet "Pusat", 4 produk
+      contoh, `branch_inventory` awal 20 per item.
+- [x] `npm run dev` jalan, Supabase terhubung (tested lewat script, bukan lewat
+      browser — belum ada yang klik login manual).
+- [ ] **Belum dites login + checkout kasir dari browser beneran.** Ini checkpoint
+      berikutnya: buka app, login `teko.balioffice1@gmail.com`, coba halaman
+      Kasir di `/branch/kasir` atau `/admin/kasir`, checkout 1 produk, cek
+      `orders`/`order_items` kebentuk dan `branch_inventory` turun.
 
 ## Jadwal 3 hari
 
