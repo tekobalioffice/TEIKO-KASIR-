@@ -1,6 +1,6 @@
 import { pindahByItem as pindahLogsByItem } from '../utils/pindahLogs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Icon from '../components/Icon';
 import { exportShiftToExcel } from '../utils/exportExcel';
@@ -18,6 +18,8 @@ let staleBusy = false;
 export default function BranchPOS() {
   const { userData } = useAuth();
   const context = useOutletContext();
+  const location = useLocation();
+  const kasirPath = location.pathname.startsWith('/admin') ? '/admin/kasir' : '/branch/kasir';
   const setCurrentBranch = context?.setCurrentBranch || (() => { });
   const setLivePorsiSisa = context?.setLivePorsiSisa || (() => { });
   const [localPorsiTransfers, setLocalPorsiTransfers] = useState({});
@@ -3112,6 +3114,15 @@ export default function BranchPOS() {
           <h1 className="text-primary" style={{ fontSize: '1.2rem', marginBottom: 0 }}>Input Laporan Shift</h1>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {isShiftStarted && (
+            <Link
+              to={kasirPath}
+              className="btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--primary)', color: 'var(--primary)', textDecoration: 'none' }}
+            >
+              <Icon name="cart" size={16} /> Kasir
+            </Link>
+          )}
           {(['admin', 'administrator', 'owner'].includes(userData?.role?.toLowerCase())) && (
             <button
               type="button"

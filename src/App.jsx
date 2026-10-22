@@ -75,6 +75,7 @@ import AdminCekPengiriman from './pages/AdminCekPengiriman';
 import AdminStockHistory from './pages/AdminStockHistory';
 import AdminKoreksi from './pages/AdminKoreksi';
 import AdminKoreksiLaporan from './pages/AdminKoreksiLaporan';
+import AdminSettings from './pages/AdminSettings';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 
@@ -164,6 +165,7 @@ export default function App() {
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="cek-pengiriman" element={<AdminCekPengiriman />} />
             <Route path="riwayat-stok" element={<AdminStockHistory />} />
+            <Route path="pengaturan" element={<AdminSettings />} />
           </Route>
 
           {/* Branch Routes */}

@@ -147,6 +147,10 @@ export default function AdminLayout() {
           <Link to="/admin/riwayat-stok" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
             <Icon name="clipboard-check" size={18} /> Riwayat Aktivitas Stok
           </Link>
+
+          <Link to="/admin/pengaturan" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
+            <Icon name="settings" size={18} /> Pengaturan
+          </Link>
         </nav>
 
         <div style={{ padding: '1.5rem', borderTop: '1px solid var(--border-color)' }}>

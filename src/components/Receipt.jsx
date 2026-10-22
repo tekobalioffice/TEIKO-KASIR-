@@ -1,14 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabase';
 
-// Struk 58mm, print-only via window.print(). Tidak pakai library cetak baru.
+// Struk print-only via window.print(). Tidak pakai library cetak baru.
+// Ukuran kertas + teks header/footer diambil dari app_settings (Pengaturan di sidebar admin) —
+// default 58mm kalau tabel/pengaturan belum ada, biar tidak error di clone yang belum jalanin
+// supabase/migrations_settings.sql.
 const CHANNEL_LABEL = { offline: 'Offline', gojek: 'Gojek', grab: 'Grab' };
+const DEFAULT_SETTINGS = { receipt_width_mm: 58, receipt_header_text: 'TEIKO', receipt_footer_text: 'Terima kasih' };
 
 export default function Receipt({ order, branchName, onDone }) {
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('app_settings').select('*').maybeSingle();
+      if (data) setSettings(data);
+    })();
+  }, []);
+
   const items = order.items || [];
   const total = order.total ?? items.reduce((s, it) => s + it.price * it.qty, 0);
   const waktu = new Date(order.created_at || Date.now()).toLocaleString('id-ID', {
     dateStyle: 'medium', timeStyle: 'short',
   });
+  const width = `${settings.receipt_width_mm || 58}mm`;
 
   return (
     <div>
@@ -16,16 +31,16 @@ export default function Receipt({ order, branchName, onDone }) {
         @media print {
           body * { visibility: hidden; }
           #struk, #struk * { visibility: visible; }
-          #struk { position: absolute; top: 0; left: 0; width: 58mm; }
+          #struk { position: absolute; top: 0; left: 0; width: ${width}; }
           .no-print { display: none !important; }
         }
       `}</style>
 
       <div id="struk" style={{
-        width: '58mm', margin: '0 auto', padding: '0.5rem', fontFamily: 'monospace',
+        width, margin: '0 auto', padding: '0.5rem', fontFamily: 'monospace',
         fontSize: '0.72rem', color: '#000', background: '#fff',
       }}>
-        <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }}>TEIKO</div>
+        <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }}>{settings.receipt_header_text || 'TEIKO'}</div>
         <div style={{ textAlign: 'center' }}>{branchName || '-'}</div>
         <div style={{ textAlign: 'center' }}>{waktu}</div>
         <div style={{ textAlign: 'center' }}>{CHANNEL_LABEL[order.channel] || order.channel}</div>
@@ -46,7 +61,7 @@ export default function Receipt({ order, branchName, onDone }) {
           <span>TOTAL</span>
           <span>Rp {total.toLocaleString('id-ID')}</span>
         </div>
-        <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>Terima kasih</div>
+        <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>{settings.receipt_footer_text || 'Terima kasih'}</div>
       </div>
 
       <div className="no-print" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '1rem' }}>

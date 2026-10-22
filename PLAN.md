@@ -47,6 +47,19 @@ baru (`uuvbdvcwphptbzrqvsja`), bukan punya produksi.
       yang sama (`localStorage.pos_active_session`) yang BranchPOS pakai
       sendiri. Belum ada shift aktif untuk cabang itu → Kasir nampilin layar
       "Belum Ada Shift Aktif" + tombol ke Input Penjualan, bukan grid produk.
+- [x] Tombol "Kasir" ditaruh di halaman Input Laporan Shift sendiri (sebelah
+      tombol Stok), bukan cuma di sidebar — lebih kelihatan, sesuai yang
+      user minta. Muncul begitu shift sudah dibuka.
+- [x] **Halaman Pengaturan baru** (`/admin/pengaturan`, sidebar menu
+      "Pengaturan"): ukuran kertas struk (58mm default / 80mm), teks header
+      & footer struk. Tabelnya `app_settings` (singleton row) — lihat
+      `supabase/migrations_settings.sql`, **BELUM dijalankan di Supabase**,
+      perlu Anda run dulu baru halaman ini kepakai (sebelum itu fallback ke
+      default 58mm/TEIKO/Terima kasih, tidak error).
+- [x] Kasir TIDAK dibatasi ke outlet "Pusat" saja — itu cuma outlet seed
+      buat testing. Kasir ikut `selectedBranch` sesi yang lagi aktif, sama
+      seperti Opname, jadi semua outlet bisa pakai begitu ada produk &
+      shift aktif di cabang itu.
 
 ## Jadwal 3 hari
 
