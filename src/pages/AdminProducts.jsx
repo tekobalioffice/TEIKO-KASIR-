@@ -6,7 +6,7 @@ export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setModalOpen] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: '', category: 'Drink', variant: 'Standar', price: '', image_url: '', is_unlimited: false, is_dual_base: false, is_non_base: false, susu_add_price: 0, display_order: 0 });
+  const [newProduct, setNewProduct] = useState({ name: '', category: 'Drink', variant: 'Standar', price: '', image_url: '', is_unlimited: false, is_dual_base: false, is_non_base: false, susu_add_price: 0, display_order: 0, gojek_price: '', grab_price: '' });
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -54,12 +54,14 @@ export default function AdminProducts() {
       };
 
       let error;
+      let productId = editingId;
       if (editingId) {
         const { error: updateErr } = await supabase.from('products').update(productData).eq('id', editingId);
         error = updateErr;
       } else {
-        const { error: insertErr } = await supabase.from('products').insert([productData]);
+        const { data: inserted, error: insertErr } = await supabase.from('products').insert([productData]).select().single();
         error = insertErr;
+        productId = inserted?.id;
       }
 
       if (error) {
@@ -68,16 +70,34 @@ export default function AdminProducts() {
         }
         throw error;
       }
-      
+
+      if (productId) await saveChannelPrices(productId);
+
       await fetchProducts();
       setModalOpen(false);
       setEditingId(null);
-      setNewProduct({ name: '', category: 'Drink', variant: 'Standar', price: '', image_url: '', is_unlimited: false, is_dual_base: false, is_non_base: false, susu_add_price: 0, display_order: 0 });
+      setNewProduct({ name: '', category: 'Drink', variant: 'Standar', price: '', image_url: '', is_unlimited: false, is_dual_base: false, is_non_base: false, susu_add_price: 0, display_order: 0, gojek_price: '', grab_price: '' });
     } catch (error) {
       console.error('Error adding product:', error);
       alert(`Gagal menyimpan produk:\n${error.message || JSON.stringify(error)}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Harga khusus Gojek/Grab: kosong = pakai harga normal (hapus baris override-nya).
+  const saveChannelPrices = async (productId) => {
+    const entries = [
+      ['gojek', newProduct.gojek_price],
+      ['grab', newProduct.grab_price],
+    ];
+    for (const [channel, val] of entries) {
+      const price = parseInt(val);
+      if (val === '' || val == null || !price) {
+        await supabase.from('product_channel_prices').delete().eq('product_id', productId).eq('channel', channel);
+      } else {
+        await supabase.from('product_channel_prices').upsert([{ product_id: productId, channel, price }]);
+      }
     }
   };
 
@@ -114,18 +134,23 @@ export default function AdminProducts() {
     }
   };
 
-  const handleEdit = (prod) => {
-    setNewProduct({ 
-      name: prod.name, 
-      category: prod.category || 'Drink', 
-      variant: prod.variant || 'Standar', 
-      price: prod.price || '', 
-      image_url: prod.image_url || '', 
+  const handleEdit = async (prod) => {
+    const { data: channelPrices } = await supabase.from('product_channel_prices').select('channel, price').eq('product_id', prod.id);
+    const gojek = channelPrices?.find(c => c.channel === 'gojek');
+    const grab = channelPrices?.find(c => c.channel === 'grab');
+    setNewProduct({
+      name: prod.name,
+      category: prod.category || 'Drink',
+      variant: prod.variant || 'Standar',
+      price: prod.price || '',
+      image_url: prod.image_url || '',
       is_unlimited: prod.is_unlimited || false,
       is_dual_base: prod.is_dual_base || false,
       is_non_base: prod.is_non_base || false,
       susu_add_price: prod.susu_add_price || 0,
-      display_order: prod.display_order || 0
+      display_order: prod.display_order || 0,
+      gojek_price: gojek?.price ?? '',
+      grab_price: grab?.price ?? ''
     });
     setEditingId(prod.id);
     setDelModalOpen(false);
@@ -209,7 +234,7 @@ export default function AdminProducts() {
         </div>
         <button onClick={() => {
             setEditingId(null);
-            setNewProduct({ name: '', category: 'Drink', variant: 'Standar', price: '', image_url: '', is_unlimited: false, is_dual_base: false, is_non_base: false, susu_add_price: 0, display_order: 0 });
+            setNewProduct({ name: '', category: 'Drink', variant: 'Standar', price: '', image_url: '', is_unlimited: false, is_dual_base: false, is_non_base: false, susu_add_price: 0, display_order: 0, gojek_price: '', grab_price: '' });
             setDelModalOpen(false);
             setModalOpen(true);
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -300,6 +325,14 @@ export default function AdminProducts() {
             <div>
               <label className="text-muted" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Harga</label>
               <input type="number" className="input-field" required value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="Rp" />
+            </div>
+
+            <div>
+              <label className="text-muted" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Harga Khusus Gojek / Grab (opsional)</label>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <input type="number" className="input-field" value={newProduct.gojek_price} onChange={e => setNewProduct({...newProduct, gojek_price: e.target.value})} placeholder="Gojek — kosongkan = harga normal" style={{ marginBottom: 0 }} />
+                <input type="number" className="input-field" value={newProduct.grab_price} onChange={e => setNewProduct({...newProduct, grab_price: e.target.value})} placeholder="Grab — kosongkan = harga normal" style={{ marginBottom: 0 }} />
+              </div>
             </div>
 
             <div>

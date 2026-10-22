@@ -188,25 +188,36 @@ export default function BranchKasir() {
 
       {/* Grid produk */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.75rem', alignContent: 'start' }}>
-        {visibleProducts.map(p => (
-          <button key={p.id} onClick={() => addToCart(p)} className="glass-panel" style={{
-            border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0.6rem',
-            cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.4rem',
-          }}>
-            <div style={{
-              width: '100%', aspectRatio: '1', borderRadius: '8px', background: 'var(--fill-subtle)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+        {visibleProducts.map(p => {
+          const qtyInCart = cart.filter(it => it.product_id === p.id).reduce((s, it) => s + it.qty, 0);
+          return (
+            <button key={p.id} onClick={() => addToCart(p)} className="glass-panel" style={{
+              position: 'relative', border: `1.5px solid ${qtyInCart ? 'var(--primary)' : 'var(--border-color)'}`,
+              borderRadius: '12px', padding: '0.6rem', cursor: 'pointer', textAlign: 'left',
+              display: 'flex', flexDirection: 'column', gap: '0.4rem',
             }}>
-              {p.image_url
-                ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <Icon name="package" size={28} />}
-            </div>
-            <div style={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.2 }}>{p.name}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700 }}>
-              Rp {priceFor(p).toLocaleString('id-ID')}
-            </div>
-          </button>
-        ))}
+              {qtyInCart > 0 && (
+                <span style={{
+                  position: 'absolute', top: '-6px', right: '-6px', background: 'var(--primary)', color: '#fff',
+                  borderRadius: '999px', minWidth: '20px', height: '20px', fontSize: '0.7rem', fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                }}>{qtyInCart}</span>
+              )}
+              <div style={{
+                width: '100%', aspectRatio: '1', borderRadius: '8px', background: 'var(--fill-subtle)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+              }}>
+                {p.image_url
+                  ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <Icon name="package" size={28} />}
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.2 }}>{p.name}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700 }}>
+                Rp {priceFor(p).toLocaleString('id-ID')}
+              </div>
+            </button>
+          );
+        })}
         {!visibleProducts.length && <div className="text-muted" style={{ fontSize: '0.85rem' }}>Belum ada produk di kategori ini.</div>}
       </div>
 

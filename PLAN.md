@@ -26,10 +26,19 @@ baru (`uuvbdvcwphptbzrqvsja`), bukan punya produksi.
       contoh, `branch_inventory` awal 20 per item.
 - [x] `npm run dev` jalan, Supabase terhubung (tested lewat script, bukan lewat
       browser — belum ada yang klik login manual).
-- [ ] **Belum dites login + checkout kasir dari browser beneran.** Ini checkpoint
-      berikutnya: buka app, login `teko.balioffice1@gmail.com`, coba halaman
-      Kasir di `/branch/kasir` atau `/admin/kasir`, checkout 1 produk, cek
-      `orders`/`order_items` kebentuk dan `branch_inventory` turun.
+- [x] Login + buka halaman Kasir dari browser beneran — dikonfirmasi user,
+      tidak ada error, halaman kebuka normal.
+- [ ] Checkout 1 produk dari UI belum dikonfirmasi eksplisit (asumsi oke
+      karena "semua aman" — cek lagi kalau nemu masalah pas coba bayar).
+- [x] Highlight kartu terpilih + badge jumlah qty di grid kasir
+      (`BranchKasir.jsx`).
+- [x] Form harga Gojek/Grab di AdminProducts, wired ke
+      `product_channel_prices` (kosong = pakai harga normal). Prefill saat
+      edit produk.
+- [ ] Foto produk masih placeholder ikon — belum ada yang diupload lewat
+      AdminProducts (fiturnya sudah ada, tinggal diisi manual per produk).
+- [ ] Belum dites: edit produk → isi harga Gojek/Grab → buka Kasir → pindah
+      channel → harga di grid & keranjang ikut berubah.
 
 ## Jadwal 3 hari
 
