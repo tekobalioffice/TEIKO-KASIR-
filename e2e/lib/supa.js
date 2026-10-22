@@ -1,8 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Sama dengan src/supabase.js (nilai ini memang sudah ada di repo).
-const URL = 'https://ltufkvpsdbdybhheflwi.supabase.co';
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0dWZrdnBzZGJkeWJoaGVmbHdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNDAyOTAsImV4cCI6MjA4ODgxNjI5MH0.EdhPLL_Vhwwcep-6jQY2Sz40zVLHPa5TNW1q21CyrrM';
+const URL = process.env.VITE_SUPABASE_URL;
+const ANON = process.env.VITE_SUPABASE_ANON_KEY;
 
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ANON;
 

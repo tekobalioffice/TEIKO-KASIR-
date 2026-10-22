@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
 // URL Database Supabase
-const supabaseUrl = 'https://ltufkvpsdbdybhheflwi.supabase.co'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 // Kunci API (Anon/Public)
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0dWZrdnBzZGJkeWJoaGVmbHdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNDAyOTAsImV4cCI6MjA4ODgxNjI5MH0.EdhPLL_Vhwwcep-6jQY2Sz40zVLHPa5TNW1q21CyrrM'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 

@@ -3,6 +3,7 @@ import { config as loadEnv } from 'dotenv';
 
 // Kredensial & nama outlet test dibaca dari .env.test.local (gitignored).
 loadEnv({ path: '.env.test.local' });
+loadEnv({ path: '.env.local' });
 
 export default defineConfig({
   testDir: './e2e',
