@@ -22,6 +22,26 @@ baru (`uuvbdvcwphptbzrqvsja`), bukan punya produksi.
 - [ ] **Belum dijalankan ke project Supabase baru.** Schema.sql baru ditulis,
       belum di-run di SQL Editor. Tanpa ini, app tidak bisa login/kerja sama sekali.
 
+## Jadwal 3 hari
+
+- **Hari 1 — DB jalan.** Anda jalankan `supabase/schema.sql` +
+  `supabase/trigger_current_qty.sql` di SQL Editor project Supabase baru
+  (saya tidak punya akses tulis DDL ke sana, ini satu-satunya langkah yang
+  butuh Anda). Saya seed 1 outlet, 1 admin, beberapa produk, lalu
+  `supabase/migrations_kasir.sql` (orders, order_items, product_channel_prices).
+  Checkpoint: `npm run dev`, bisa login, halaman kebuka.
+- **Hari 2 — Kasir jalan.** Halaman `BranchKasir.jsx`: grid produk + kategori +
+  keranjang, pilih channel Offline/Gojek/Grab (harga otomatis ganti), tombol
+  bayar → simpan order + potong stok. Checkpoint: transaksi end-to-end lewat
+  UI, data masuk ke `orders`/`order_items`.
+- **Hari 3 — Struk + harga channel + rapi.** Cetak struk per pesanan
+  (`window.print`, CSS 58/80mm), input harga Gojek/Grab + upload foto di
+  AdminProducts, push ke GitHub. Checkpoint: satu transaksi penuh dari grid
+  sampai struk tercetak.
+
+Hari 1 butuh satu aksi dari Anda (jalankan SQL). Hari 2–3 saya kerjakan
+sendiri di sesi berikutnya, tinggal lanjut dari checklist di bawah.
+
 ## Langkah berikut, urut
 
 1. **Jalankan `supabase/schema.sql`** di SQL Editor project Supabase baru,
