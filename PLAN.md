@@ -39,6 +39,14 @@ baru (`uuvbdvcwphptbzrqvsja`), bukan punya produksi.
       AdminProducts (fiturnya sudah ada, tinggal diisi manual per produk).
 - [ ] Belum dites: edit produk → isi harga Gojek/Grab → buka Kasir → pindah
       channel → harga di grid & keranjang ikut berubah.
+- [x] Produk tanpa kategori tidak hilang lagi — fallback tab "Lainnya".
+- [x] Banner "Omzet Kasir hari ini" disambungkan ke Input Penjualan — info
+      pembanding, bukan sumber angka resmi (lihat "Keputusan yang sudah
+      diputuskan" soal rumus revenue stok x harga normal yang tidak berubah).
+- [x] **Kasir dikunci sampai shift dibuka di Input Penjualan.** Pakai sinyal
+      yang sama (`localStorage.pos_active_session`) yang BranchPOS pakai
+      sendiri. Belum ada shift aktif untuk cabang itu → Kasir nampilin layar
+      "Belum Ada Shift Aktif" + tombol ke Input Penjualan, bukan grid produk.
 
 ## Jadwal 3 hari
 

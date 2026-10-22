@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocalStorageBranch } from '../hooks/useLocalStorageBranch';
 import Icon from '../components/Icon';
@@ -21,10 +21,29 @@ const CHANNELS = [
   { id: 'grab', label: 'Grab' },
 ];
 
+// Kasir butuh shift yang sudah dibuka di Input Penjualan (stok awal sudah diisi) —
+// sinyal yang sama persis dipakai BranchPOS.jsx (localStorage.pos_active_session),
+// bukan dicek ulang dari awal. Tanpa ini, kasir bisa jual sebelum ada baseline stok
+// awal yang jelas, bikin opname akhir shift tidak balance.
+function getActiveSession() {
+  try { return JSON.parse(localStorage.getItem('pos_active_session') || 'null'); }
+  catch { return null; }
+}
+
 export default function BranchKasir() {
   const { userData } = useAuth();
   const context = useOutletContext();
+  const location = useLocation();
   const [selectedBranch] = useLocalStorageBranch('');
+  const [activeSession, setActiveSession] = useState(getActiveSession());
+
+  // localStorage tidak reaktif antar-tab/refresh sendiri — cek ulang tiap kali halaman ini difokus.
+  useEffect(() => {
+    const check = () => setActiveSession(getActiveSession());
+    check();
+    window.addEventListener('focus', check);
+    return () => window.removeEventListener('focus', check);
+  }, [location.pathname]);
 
   useEffect(() => { context?.setCurrentBranch?.(selectedBranch); }, [selectedBranch]);
 
@@ -171,6 +190,26 @@ export default function BranchKasir() {
 
   if (lastOrder) {
     return <Receipt order={lastOrder} branchName={selectedBranch} onDone={() => setLastOrder(null)} />;
+  }
+
+  const inputPenjualanPath = location.pathname.startsWith('/admin') ? '/admin/pos' : '/branch/pos';
+  const shiftOk = activeSession && selectedBranch && activeSession.branch === selectedBranch;
+
+  if (!selectedBranch || !shiftOk) {
+    return (
+      <div className="glass-panel" style={{ maxWidth: '480px', margin: '3rem auto', padding: '2rem', textAlign: 'center' }}>
+        <Icon name="alert-circle" size={32} className="text-muted" />
+        <h2 style={{ marginTop: '0.75rem', fontSize: '1.05rem' }}>Belum Ada Shift Aktif</h2>
+        <p className="text-muted" style={{ fontSize: '0.85rem', marginTop: '0.4rem' }}>
+          Buka shift dulu di Input Penjualan (pilih cabang, isi stok awal) sebelum
+          pakai Kasir — biar stok dan laporan tetap balance.
+        </p>
+        <Link to={inputPenjualanPath} style={{
+          display: 'inline-block', marginTop: '1.25rem', padding: '0.6rem 1.4rem', borderRadius: '8px',
+          background: 'var(--primary)', color: '#fff', fontWeight: 700, textDecoration: 'none',
+        }}>Buka Input Penjualan</Link>
+      </div>
+    );
   }
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }} className="text-muted">Memuat produk…</div>;
