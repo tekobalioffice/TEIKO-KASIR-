@@ -6,6 +6,7 @@ import Icon from '../components/Icon';
 import { exportShiftToExcel } from '../utils/exportExcel';
 import { supabase } from '../supabase';
 import BranchStockDrawer from '../components/BranchStockDrawer';
+import KasirOmzetBanner from '../components/KasirOmzetBanner';
 import { parseQty, formatFraction, STOCK_KEY_MAP, CUP_SUBTRACTOR_DRINKS, getStockKey, getDetailKey, getPorsiWindowStart } from '../utils/stockUtils';
 import { isStaleBuild } from '../utils/appVersion';
 
@@ -3363,6 +3364,8 @@ export default function BranchPOS() {
           ))}
         </div>
       )}
+
+      <KasirOmzetBanner branchName={selectedBranch} date={selectedDate} />
 
       {/* Shift info banner */}
       <div style={{
