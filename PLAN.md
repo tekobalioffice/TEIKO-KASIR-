@@ -71,10 +71,23 @@ sendiri di sesi berikutnya, tinggal lanjut dari checklist di bawah.
    shift yang sudah ada — selisih jadi sinyal audit, bukan dibuang.
 9. E2E test baru untuk alur kasir (ikut pola `e2e/pos-*.spec.js` yang sudah ada).
 
+## Keputusan yang sudah diputuskan
+
+- **Kasir motong stok live, semua channel sama.** Checkout kasir (Offline,
+  Gojek, Grab — jalur sama) langsung mengurangi `branch_inventory.display_qty`
+  pakai kunci nama yang sama dengan opname (`BranchKasir.jsx` fungsi
+  `stockKeyFor`), plus catat ke `stock_restock_log`. Kartu Stok
+  (`AdminKartuStock.jsx`, baca `branch_inventory.current_qty` live) jadi
+  balance otomatis, tidak perlu nunggu opname akhir shift.
+- Produk yang belum punya baris `branch_inventory` (campuran bahan tanpa
+  display stock sendiri) dilewati saat checkout — tetap jalur manual opname
+  seperti sekarang. Ini batas v1, bukan bug.
+- Konsumsi bahan per resep (gelas, sedotan, gula per cup, dll) **belum**
+  otomatis dari kasir — itu tetap diisi manual staf saat opname, sama seperti
+  sekarang. Baru layak diotomasi kalau ada data resep per produk (belum ada).
+
 ## Keputusan yang masih nunggu user
 
-- Kasir menggantikan opname, atau berjalan paralel sebagai pembanding?
-  (asumsi saat ini: paralel, opname tetap jalan)
 - Printer struk: thermal USB / Bluetooth / printer biasa?
 - Input pesanan Gojek/Grab: manual oleh staf, atau integrasi otomatis nanti?
   (asumsi saat ini: manual)

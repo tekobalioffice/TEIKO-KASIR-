@@ -6,10 +6,14 @@ import Icon from '../components/Icon';
 import { supabase } from '../supabase';
 import Receipt from '../components/Receipt';
 
-// ponytail: kasir ini catat transaksi & cetak struk, TAPI belum motong branch_inventory.
-// Opname blind-POS (BranchPOS.jsx) tetap sumber omzet resmi untuk sekarang — lihat PLAN.md
-// "Keputusan yang masih nunggu user". Kalau kasir jadi sumber omzet utama, tambah potong
-// stok di handleCheckout + rekonsiliasi vs opname.
+// Kasir motong branch_inventory langsung saat checkout (channel apa pun — offline,
+// Gojek, Grab — jalur sama), pakai kunci nama item yang sama dengan opname
+// (nama produk + varian, lihat stockKeyFor). Jadi Kartu Stok selalu balance LIVE,
+// bukan cuma ketahuan pas opname akhir shift. Produk yang belum punya baris
+// branch_inventory (item campuran bahan, dll) dilewati tanpa error — itu tetap
+// jalur manual opname seperti sekarang.
+const stockKeyFor = (product) =>
+  product.variant && product.variant !== 'Standar' ? `${product.name} ${product.variant}` : product.name;
 
 const CHANNELS = [
   { id: 'offline', label: 'Offline' },
@@ -92,6 +96,40 @@ export default function BranchKasir() {
     }));
   };
 
+  // Potong branch_inventory.display_qty per item terjual (current_qty ikut lewat
+  // trigger trg_sync_current_qty). Item tanpa baris branch_inventory dilewati.
+  const deductStock = async (items) => {
+    for (const it of items) {
+      const product = products.find(p => p.id === it.product_id);
+      const itemName = product ? stockKeyFor(product) : it.name;
+
+      const { data: inv } = await supabase
+        .from('branch_inventory')
+        .select('display_qty, safety_qty')
+        .eq('branch_name', selectedBranch)
+        .eq('item_name', itemName)
+        .maybeSingle();
+      if (!inv) continue; // tidak dilacak sebagai display stock — biarkan ke opname manual
+
+      const before = inv.display_qty ?? 0;
+      const after = Math.max(0, before - it.qty);
+
+      await supabase.from('branch_inventory')
+        .update({ display_qty: after })
+        .eq('branch_name', selectedBranch)
+        .eq('item_name', itemName);
+
+      await supabase.from('stock_restock_log').insert([{
+        branch_name: selectedBranch,
+        item_name: itemName,
+        petugas_name: `${userData?.name || 'Kasir'} (Kasir - ${channel})`,
+        qty_added: after - before,
+        qty_before: before,
+        qty_after: after,
+      }]);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!cart.length || saving) return;
     if (!selectedBranch) { alert('Pilih cabang dulu (buka halaman Opname sekali untuk set cabang).'); return; }
@@ -115,6 +153,8 @@ export default function BranchKasir() {
       }));
       const { error: itemsErr } = await supabase.from('order_items').insert(items);
       if (itemsErr) throw itemsErr;
+
+      await deductStock(cart);
 
       setLastOrder({ ...order, items: cart });
       setCart([]);
