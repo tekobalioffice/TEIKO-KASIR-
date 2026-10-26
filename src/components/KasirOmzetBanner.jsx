@@ -19,8 +19,7 @@ export default function KasirOmzetBanner({ branchName, date }) {
         .from('orders')
         .select('total, channel')
         .eq('branch_name', branchName)
-        .gte('created_at', `${date}T00:00:00`)
-        .lte('created_at', `${date}T23:59:59`);
+        .eq('report_date', date);
       if (cancelled) return;
       if (!data || !data.length) { setSummary({ total: 0, count: 0, byChannel: {} }); return; }
       const total = data.reduce((s, o) => s + (o.total || 0), 0);

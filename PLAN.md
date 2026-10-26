@@ -112,15 +112,30 @@ sendiri di sesi berikutnya, tinggal lanjut dari checklist di bawah.
 
 ## Keputusan yang sudah diputuskan
 
-- **Kasir motong stok live, semua channel sama.** Checkout kasir (Offline,
-  Gojek, Grab — jalur sama) langsung mengurangi `branch_inventory.display_qty`
-  pakai kunci nama yang sama dengan opname (`BranchKasir.jsx` fungsi
-  `stockKeyFor`), plus catat ke `stock_restock_log`. Kartu Stok
-  (`AdminKartuStock.jsx`, baca `branch_inventory.current_qty` live) jadi
-  balance otomatis, tidak perlu nunggu opname akhir shift.
-- Produk yang belum punya baris `branch_inventory` (campuran bahan tanpa
-  display stock sendiri) dilewati saat checkout — tetap jalur manual opname
-  seperti sekarang. Ini batas v1, bukan bug.
+- **(Diubah 2026-10-26) Kasir TIDAK motong stok.** Versi lama motong
+  `display_qty` langsung, akibatnya Awal di form opname ikut turun dan
+  Terjual (Awal − Sisa) jadi 0 — jualan Kasir hilang dari laporan shift.
+  Sekarang tiap order dicatat dengan `orders.report_date` + `orders.shift`
+  (sesi Input Penjualan aktif). BranchPOS baca `order_items` itu: Sisa kosong
+  → Terjual = jumlah dari Kasir, placeholder Sisa = Awal + Tambah − Kasir,
+  badge "(−N Kasir)" di tiap item. Sisa diisi manual tetap menang. Tutup Shift
+  motong stok sekali (live − terjual) seperti biasa. Kartu Stok baru update
+  saat Tutup Shift (sama seperti sebelum ada Kasir).
+- Item auto-hitung (Es Teh, Teh Tarik, Milk Tea, Full Cream — dari
+  cup/bahan): rumus cup/bahan tetap menang. Selama bahannya belum diopname
+  (hasil 0), Terjual pakai angka Kasir.
+- **Cup Ori / Cup Premi membatasi Kasir.** Tiap menu bercup (aturan
+  `cupVariantOf` di `stockUtils.js`, sama dengan hitungan cup di
+  calculateTotals) butuh 1 cup varian-nya. Stok cup = bahan bernama "cup" +
+  "premi" / "ori"/"paper" (display + tambah) − cup terpakai lewat Kasir shift
+  ini − keranjang. Bahan cup belum ada di branch_inventory = tidak dibatasi.
+- **Kasir tidak boleh jual melebihi stok display.** Batas = `display_qty +
+  tambah_qty` (kunci `getStockKey`, sama dengan form opname) − jualan Kasir
+  shift ini − isi keranjang. Dicek saat tambah ke keranjang dan dicek ulang
+  dari DB saat Bayar. Belum ada baris `branch_inventory` = stok 0 = tidak
+  bisa dijual (sama dengan Awal 0 di form). Hanya auto-hitung dan
+  `is_unlimited` yang tidak dibatasi stok item-nya (tetap kena batas cup).
+  Kategori `Bahan` tidak tampil di Kasir.
 - Konsumsi bahan per resep (gelas, sedotan, gula per cup, dll) **belum**
   otomatis dari kasir — itu tetap diisi manual staf saat opname, sama seperti
   sekarang. Baru layak diotomasi kalau ada data resep per produk (belum ada).

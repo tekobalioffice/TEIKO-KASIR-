@@ -7,7 +7,7 @@ import { exportShiftToExcel } from '../utils/exportExcel';
 import { supabase } from '../supabase';
 import BranchStockDrawer from '../components/BranchStockDrawer';
 import KasirOmzetBanner from '../components/KasirOmzetBanner';
-import { parseQty, formatFraction, STOCK_KEY_MAP, CUP_SUBTRACTOR_DRINKS, getStockKey, getDetailKey, getPorsiWindowStart } from '../utils/stockUtils';
+import { parseQty, formatFraction, STOCK_KEY_MAP, CUP_SUBTRACTOR_DRINKS, getStockKey, getDetailKey, getPorsiWindowStart, sumStockUsage } from '../utils/stockUtils';
 import { isStaleBuild } from '../utils/appVersion';
 
 // Semua konstanta dan helper sudah diimport dari stockUtils.js
@@ -158,6 +158,8 @@ export default function BranchPOS() {
   const [blockedMsg, setBlockedMsg] = useState('');
   const [s2KemarinPending, setS2KemarinPending] = useState(null); // tanggal kemarin kalau Shift 2-nya belum ditutup
   const [ultraInDiamond, setUltraInDiamond] = useState(0); // salinan ref buat tampilan
+  const [kasirSoldMap, setKasirSoldMap] = useState({}); // product_id -> qty terjual lewat Kasir shift ini
+  const kasirLoadRef = useRef(null); // muat ulang jualan Kasir (dipanggil juga sebelum Tutup Shift)
   const ultraInDiamondRef = useRef(0); // kotak Diamond Besar yg asalnya dari Ultra (catatan Form Stok), diisi fetchInventory
   const autoS2Branch = useRef(null); // auto-arahkan ke S2 kemarin cukup sekali per cabang
 
@@ -1004,10 +1006,20 @@ export default function BranchPOS() {
     return q > displayNow + tambahDB + fisikTambah;
   };
 
+  // Bahan terpakai lewat Kasir shift ini (cup + resep: Gula Milk Tea, Black Tea, Diamond, Ultra),
+  // per nama bahan. Rumus auto-hitung (Es Teh dari cup, Milk Tea dari gula, dst) lalu jalan sendiri
+  // selama Sisa bahan belum diisi — laporan tetap pakai rumus yang sama seperti sebelumnya.
+  const kasirBahanUsed = useMemo(() => sumStockUsage(
+    products.filter(p => p.category !== 'Bahan' && kasirSoldMap[p.id]).map(p => ({ product: p, qty: kasirSoldMap[p.id] })),
+    products.filter(p => p.category === 'Bahan').map(p => p.name),
+  ), [products, kasirSoldMap]);
+  // Jumlah dari Kasir untuk satu baris form: menu = jualan, bahan = terpakai.
+  const kasirQtyFor = (prod) => (prod.category === 'Bahan' ? kasirBahanUsed[prod.name] : kasirSoldMap[prod.id]) || 0;
+
   const getRawMaterialSold = (name) => {
     const prod = products.find(p => p.name === name && p.category === 'Bahan');
     if (!prod) return 0;
-    if (prod.qty === '' && prod.tambah === '') return 0;
+    if (prod.qty === '' && prod.tambah === '') return kasirQtyFor(prod); // belum diopname -> cup dari Kasir
     const stockKey = getStockKey(prod);
     const displayNow = displayMap[stockKey] ?? displayMap[prod.name] ?? 0;
     const tambahDB = tambahMap[stockKey] ?? tambahMap[prod.name] ?? 0;
@@ -1028,9 +1040,8 @@ export default function BranchPOS() {
       if (p.category === 'Bahan') {
         const n = p.name.toLowerCase();
         if (n.includes('cup') && ((isPremi && n.includes('premi')) || (!isPremi && (n.includes('ori') || n.includes('paper'))))) {
-          if (p.qty !== '' || p.tambah !== '') {
-            totalCups += getRawMaterialSold(p.name);
-          }
+          // getRawMaterialSold sendiri yang urus Sisa kosong (pakai cup dari Kasir) — sama dengan rumus Es Teh.
+          totalCups += getRawMaterialSold(p.name);
         }
       }
     });
@@ -1153,14 +1164,39 @@ export default function BranchPOS() {
     };
   }, []);
 
+  // Penjualan Kasir shift ini (orders.report_date + shift = sesi Input Penjualan yang aktif).
+  // Kasir TIDAK motong display_qty; jualannya dihitung di sini sebagai Terjual otomatis, dan
+  // Tutup Shift yang motong stok (live - terjual) seperti biasa — jadi tidak kepotong 2x.
+  useEffect(() => {
+    if (!isShiftStarted || !selectedBranch || !shift) { setKasirSoldMap({}); return; }
+    let cancelled = false;
+    const load = async () => {
+      const { data, error } = await supabase.from('order_items')
+        .select('product_id, qty, orders!inner(branch_name, report_date, shift)')
+        .eq('orders.branch_name', selectedBranch).eq('orders.report_date', selectedDate).eq('orders.shift', String(shift));
+      if (cancelled) return;
+      if (error) { console.error('Gagal ambil penjualan Kasir:', error); return; }
+      const map = {};
+      (data || []).forEach(r => { if (r.product_id) map[r.product_id] = (map[r.product_id] || 0) + (r.qty || 0); });
+      setKasirSoldMap(map);
+    };
+    load();
+    kasirLoadRef.current = load;
+    const onFocus = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('focus', onFocus); };
+  }, [isShiftStarted, selectedBranch, selectedDate, shift]);
+
   const getProductSoldQty = (prod) => {
     // ---- Auto-Calculation Logic ----
 
     if (prod.name === 'Milk Tea') {
       const isPremi = prod.variant === 'Premi';
-      return isPremi
+      return (isPremi
         ? (getRawMaterialSold('Gula Milk Tea Premi') || getRawMaterialSold('Gula Milk Tea'))
-        : (getRawMaterialSold('Gula Milk Tea Ori') || getRawMaterialSold('Gula Milk Tea'));
+        : (getRawMaterialSold('Gula Milk Tea Ori') || getRawMaterialSold('Gula Milk Tea')))
+        || kasirSoldMap[prod.id] || 0; // bahan belum diopname -> angka Kasir
     }
 
     if (prod.name === 'Teh Tarik') {
@@ -1183,6 +1219,7 @@ export default function BranchPOS() {
         });
       }
 
+      if (blackTea === 0) return kasirSoldMap[prod.id] || 0; // Black Tea belum diopname -> angka Kasir
       return Math.max(0, blackTea - milkTeaMenuSold);
     }
 
@@ -1192,6 +1229,7 @@ export default function BranchPOS() {
         ? Math.round((getRawMaterialSold('Ultra Milk Besar Premi') || getRawMaterialSold('Ultra Milk Besar')) * 4)
         : Math.round((getRawMaterialSold('Diamond Besar Ori') || getRawMaterialSold('Diamond Besar')) * 5);
 
+      if (milkSold === 0) return kasirSoldMap[prod.id] || 0; // susu belum diopname -> angka Kasir
       if (isPremi) {
         return Math.max(0, milkSold);
       } else {
@@ -1216,7 +1254,8 @@ export default function BranchPOS() {
       });
 
       // If cups not yet entered, return 0
-      if (totalCups === 0) return 0;
+      // Cup belum diopname -> pakai angka Kasir (0 kalau tak ada). Sisa cup diisi -> rumus cup menang.
+      if (totalCups === 0) return kasirSoldMap[prod.id] || 0;
 
       // Calculate: Total Cups - All Other Drinks Sold (same variant)
       let otherDrinksSold = 0;
@@ -1239,9 +1278,9 @@ export default function BranchPOS() {
     }
     // ---------------------------------
 
-    // Kalau staff belum isi sisa → anggap 0 terjual
-    // Kalau staff belum isi sisa → anggap 0 terjual
-    if (prod.qty === '' && prod.tambah === '') return 0;
+    // Staff belum isi Sisa → terjual = yang lewat Kasir (0 kalau tak ada). Sisa diisi manual tetap menang.
+    const kasirQty = kasirQtyFor(prod);
+    if ((prod.qty ?? '') === '' && ((prod.tambah ?? '') === '' || kasirQty > 0)) return kasirQty;
     const stockKey = getStockKey(prod);
     const displayNow = displayMap[stockKey] ?? displayMap[prod.name] ?? 0;
     const tambahDB = tambahMap[stockKey] ?? tambahMap[prod.name] ?? 0;
@@ -1865,6 +1904,9 @@ export default function BranchPOS() {
   // ── Validation Before Deposit Modal ─────────────────────────────
   const handlePreSubmit = (e) => {
     e.preventDefault();
+    // Jualan Kasir dari device lain sejak tab ini terakhir difokus — ambil lagi sebelum konfirmasi
+    // Tutup Shift, supaya laporan & potong stok pakai angka terbaru.
+    kasirLoadRef.current?.();
     if (!hasSales) {
       alert('Isi qty penjualan terlebih dahulu sebelum menyimpan laporan.');
       return;
@@ -1918,6 +1960,11 @@ export default function BranchPOS() {
         continue;
       }
       const jual = getProductSoldQty(prod);
+      // Sisa manual bikin Terjual < yang tercatat di Kasir = ada struk yang tidak masuk laporan.
+      const kasirQ = kasirQtyFor(prod);
+      if (kasirQ > jual + 0.001) {
+        warns.push(`• ${stockKey}: Kasir sudah jual ${formatFraction(kasirQ)}, tapi dari Sisa yang diisi terjual cuma ${formatFraction(jual)} — cek Sisa (kosongkan biar otomatis).`);
+      }
       const expected = awal + tambahDB + fisikTambah - jual;
       if (Math.abs(expected - sisa) > 0.001) {
         warns.push(`• ${stockKey}: ${formatFraction(awal)}+${formatFraction(tambahDB + fisikTambah)}-${formatFraction(jual)} = ${formatFraction(expected)}, Sisa diisi ${formatFraction(sisa)}`);
@@ -2376,17 +2423,19 @@ export default function BranchPOS() {
         // produk menulis upsert-nya sendiri via Promise.all, urutannya balapan & yang
         // salah bisa menang → display bahan driver tak kepotong (bug lama). Pilih SATU
         // produk otoritatif per stockKey: yang opname-nya diisi (getDetailKey === stockKey
-        // & qty terisi) menang; kalau tak ada, yang sold terbesar.
+        // & qty terisi) menang; lalu baris item itu sendiri (bahan "Gula Milk Tea Ori", bukan menu
+        // Milk Tea yang unlimited); lalu yang sold terbesar. Tanpa langkah kedua, Sisa kosong +
+        // jualan dari Kasir bikin sold seri -> menu unlimited yang menang -> bahan tak kepotong.
         const byKey = new Map();
+        const rank = (r) => [r.ownOpname ? 1 : 0, r.own ? 1 : 0, r.sold];
+        const better = (a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
         for (const prod of products) {
           const k = getStockKey(prod);
-          const ownOpname = getDetailKey(prod) === k
-            && prod.qty !== '' && prod.qty !== null && prod.qty !== undefined && !prod.is_unlimited;
-          const s = getProductSoldQty(prod);
+          const own = getDetailKey(prod) === k && !prod.is_unlimited;
+          const ownOpname = own && prod.qty !== '' && prod.qty !== null && prod.qty !== undefined;
+          const cand = { prod, own, ownOpname, sold: getProductSoldQty(prod) };
           const cur = byKey.get(k);
-          if (!cur) { byKey.set(k, { prod, ownOpname, sold: s }); continue; }
-          if (ownOpname && !cur.ownOpname) byKey.set(k, { prod, ownOpname, sold: s });
-          else if (ownOpname === cur.ownOpname && s > cur.sold) byKey.set(k, { prod, ownOpname, sold: s });
+          if (!cur || better(cand, cur)) byKey.set(k, cand);
         }
 
         for (const { prod, sold } of byKey.values()) {
@@ -2579,7 +2628,10 @@ export default function BranchPOS() {
       // Staff habis nutup Shift 2 kemarin (lewat tengah malam) → balik ke hari ini.
       if (!canPickDate(userData)) setSelectedDateState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]);
 
-      // 5. Reset form
+      // 5. Reset form. Matikan status shift DULUAN (satu batch dengan reset isian): kalau masih
+      // true, Auto-Save Draft nulis ulang draft kosong -> "isian belum selesai (Shift N)" muncul
+      // lagi di layar Mulai Sesi padahal shift sudah ditutup.
+      setIsShiftStarted(false);
       setPorsiTransfers({});
       setProducts(products.map(p => ({ ...p, qty: '', tambah: '', safety_qty: '', tambah_safety: '', porsi_terpakai: '', porsi_rusak: '' })));
       setExpenses([{ id: 1, name: 'Isi Ulang Galon', amount: '' }, { id: 2, name: 'Es Batu', amount: '' }]);
@@ -2590,7 +2642,7 @@ export default function BranchPOS() {
         ? "Shift 1 telah selesai, beralih pada shift 2"
         : `Laporan Shift ${shift} berhasil disimpan!`;
       setCompletionMsg(nextMsg);
-      setIsShiftStarted(false); // Kembalikan ke halaman awal Mulai Sesi Kasir
+      localStorage.removeItem(`pos_draft_${branchName}_shift${shift}`); // jaga-jaga render yang sempat lolos
 
       // Alert sukses PALING AKHIR — dulu muncul sebelum marker Tutup Shift & beres-beres
       // ditulis; staff lihat "berhasil", tutup aplikasi, sisa tulisan ga kekirim.
@@ -3634,6 +3686,9 @@ export default function BranchPOS() {
                                         {pindahan > 0 && (
                                           <span style={{ color: '#096C46', fontSize: '0.75rem', fontWeight: 700 }}>(+{formatFraction(pindahan)} Tambahan)</span>
                                         )}
+                                        {kasirQtyFor(prod) > 0 && (
+                                          <span style={{ color: '#ff9500', fontSize: '0.75rem', fontWeight: 700 }}>(−{formatFraction(kasirQtyFor(prod))} Kasir)</span>
+                                        )}
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                         <span style={{ fontSize: '0.85rem', color: '#0d6fff', fontWeight: 700 }}>Sisa:</span>
@@ -3671,7 +3726,7 @@ export default function BranchPOS() {
                                             backgroundColor: (isInvalidFraction(prod) || exceedsAvail(prod)) ? 'rgba(255, 56, 60,0.1)' : 'white',
                                             color: (isInvalidFraction(prod) || exceedsAvail(prod)) ? '#ff383c' : 'inherit'
                                           }}
-                                          placeholder={formatFraction(displayAwal + pindahan)} value={prod.qty}
+                                          placeholder={formatFraction(Math.max(0, displayAwal + pindahan - kasirQtyFor(prod)))} value={prod.qty}
                                           onChange={e => handleProductChange(prod.id, 'qty', e.target.value)} />
                                       </div>
                                     </div>

@@ -40,7 +40,6 @@ const products = [
   { name: 'Choco Oreo', category: 'Sachet Series', variant: 'Ori', price: 5000, display_order: 1, is_unlimited: false },
   { name: 'GD Capucinno', category: 'Sachet Series', variant: 'Ori', price: 6000, display_order: 2, is_unlimited: false },
   { name: 'NS Lemon', category: 'Sachet Series', variant: 'Premi', price: 8000, display_order: 3, susu_add_price: 3000 },
-  { name: 'Es Teh', category: 'Hot Series', variant: 'Standar', price: 0, display_order: 4, is_unlimited: true },
 ];
 const { error: prodErr } = await supa.from('products').insert(products);
 console.log('products:', prodErr ? prodErr.message : `ok (${products.length})`);

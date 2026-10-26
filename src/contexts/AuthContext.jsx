@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 
 const AuthContext = createContext();
@@ -11,6 +11,10 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // userData terbaru untuk listener onAuthStateChange. Listener dipasang sekali, jadi tanpa ref
+  // dia selalu lihat userData = null -> tiap event (SIGNED_IN saat tab difokus lagi, TOKEN_REFRESHED)
+  // fetch ulang + loading=true -> ProtectedRoute bongkar seluruh halaman (keranjang Kasir hilang).
+  const userDataRef = useRef(null);
 
   async function login(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -28,6 +32,7 @@ export function AuthProvider({ children }) {
 
   async function handleUserChange(user) {
     if (!user) {
+      userDataRef.current = null;
       setUserData(null);
       setCurrentUser(null);
       setLoading(false);
@@ -36,7 +41,7 @@ export function AuthProvider({ children }) {
 
     setCurrentUser(user);
     // If we already have userData for this user, don't fetch again
-    if (userData && userData.id === user.id) {
+    if (userDataRef.current && userDataRef.current.id === user.id) {
       setLoading(false);
       return;
     }
@@ -49,11 +54,9 @@ export function AuthProvider({ children }) {
         .eq('id', user.id)
         .single();
         
-      if (data) {
-        setUserData(data);
-      } else {
-        setUserData({ role: 'unknown' });
-      }
+      const next = data || { role: 'unknown' };
+      userDataRef.current = data ? next : null;
+      setUserData(next);
     } catch (error) {
       console.error("Error fetching user profile from Supabase", error);
       setUserData({ role: 'unknown' });

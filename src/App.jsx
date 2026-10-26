@@ -76,6 +76,7 @@ import AdminStockHistory from './pages/AdminStockHistory';
 import AdminKoreksi from './pages/AdminKoreksi';
 import AdminKoreksiLaporan from './pages/AdminKoreksiLaporan';
 import AdminSettings from './pages/AdminSettings';
+import AdminKasirOrders from './pages/AdminKasirOrders';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 
@@ -166,6 +167,7 @@ export default function App() {
             <Route path="cek-pengiriman" element={<AdminCekPengiriman />} />
             <Route path="riwayat-stok" element={<AdminStockHistory />} />
             <Route path="pengaturan" element={<AdminSettings />} />
+            <Route path="transaksi-kasir" element={<AdminKasirOrders />} />
           </Route>
 
           {/* Branch Routes */}

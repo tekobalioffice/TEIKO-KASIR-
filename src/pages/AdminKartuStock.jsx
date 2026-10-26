@@ -1,6 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import Icon from '../components/Icon';
+import { sumStockUsage } from '../utils/stockUtils';
+
+// Penjualan Kasir yang BELUM dipotong dari stok: stok baru dipotong saat Tutup Shift, jadi
+// order dari shift yang belum punya laporan (sales_reports) masih "menggantung".
+// Hasil: { item_name: qty } — stok menu sendiri + cup + bahan resep (stockUsageOf).
+async function fetchKasirPending(branchName, invItems) {
+  const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const [{ data: orders }, { data: reports }, { data: products }] = await Promise.all([
+    supabase.from('orders').select('report_date, shift, order_items(product_id, qty)')
+      .eq('branch_name', branchName).gte('report_date', since),
+    supabase.from('sales_reports').select('date, shift').eq('branch_name', branchName).gte('date', since),
+    supabase.from('products').select('id, name, variant, category, is_unlimited, is_non_base'),
+  ]);
+  const closed = new Set((reports || []).map(r => `${r.date}|${r.shift}`));
+  const byId = Object.fromEntries((products || []).map(p => [p.id, p]));
+  const lines = (orders || [])
+    .filter(o => !closed.has(`${o.report_date}|${o.shift}`)) // shift tertutup = sudah dipotong
+    .flatMap(o => (o.order_items || []).map(it => ({ product: byId[it.product_id], qty: it.qty || 0 })));
+  return sumStockUsage(lines, invItems.map(i => i.item_name));
+}
 
 const EXCEL_ORDER = [
   "Gula 1", "Gula 2", "Premium Tea 1", "Premium 2", "Paper Cup", "Cup (Flat)", "Milo", "Beng-Beng", "GD Capucinno",
@@ -29,6 +49,7 @@ export default function AdminKartuStock() {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [kasirSold, setKasirSold] = useState({}); // item_name -> terjual Kasir, belum dipotong
 
   useEffect(() => {
     fetchBranches();
@@ -60,6 +81,7 @@ export default function AdminKartuStock() {
     }
 
     const items = data || [];
+    setKasirSold(await fetchKasirPending(branchName, items).catch(e => { console.error(e); return {}; }));
     
     // Process and sort items based on EXCEL_ORDER
     const processedItems = items.map(item => {
@@ -100,7 +122,7 @@ export default function AdminKartuStock() {
       <div className="page-title flex justify-between items-center">
         <div>
           <h1 className="text-primary mb-1">Kartu Stock Keseluruhan</h1>
-          <p className="text-muted">Melihat gabungan stok inventaris dan item operasional (Support Product) diurutkan sesuai format export excel.</p>
+          <p className="text-muted">Stok = stok tercatat (Display + Gudang). Terjual = penjualan Kasir shift yang belum ditutup (stok baru dipotong saat Tutup Shift). Sisa = Stok − Terjual.</p>
         </div>
       </div>
 
@@ -133,17 +155,22 @@ export default function AdminKartuStock() {
             <tr>
               <th style={{ width: '50px', textAlign: 'center' }}>No</th>
               <th>Nama Item</th>
-              <th style={{ textAlign: 'center' }}>Stok Saat Ini</th>
+              <th style={{ textAlign: 'center' }}>Stok</th>
+              <th style={{ textAlign: 'center' }}>Terjual (Kasir)</th>
+              <th style={{ textAlign: 'center' }}>Sisa</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="text-center text-muted py-8">Memuat data kartu stock...</td></tr>
+              <tr><td colSpan={5} className="text-center text-muted py-8">Memuat data kartu stock...</td></tr>
             ) : inventory.length === 0 ? (
-                <tr><td colSpan={3} className="text-center text-muted py-8">Belum ada item di cabang ini.</td></tr>
+                <tr><td colSpan={5} className="text-center text-muted py-8">Belum ada item di cabang ini.</td></tr>
             ) : inventory.filter(item => item.item_name.toLowerCase().includes(searchTerm.toLowerCase())).map((item, idx) => {
               const qty = item.current_qty;
               const isNotSet = qty === null || qty === '';
+              const terjual = kasirSold[item.item_name] || 0;
+              const sisa = (Number(qty) || 0) - terjual;
+              const num = { textAlign: 'center', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'monospace' };
               
               return (
                 <tr key={item.id || idx}>
@@ -152,6 +179,8 @@ export default function AdminKartuStock() {
                   <td style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'monospace', color: isNotSet ? 'var(--text-muted)' : 'inherit' }}>
                     {parseQty(qty)}
                   </td>
+                  <td style={{ ...num, color: terjual ? '#ff9500' : 'var(--text-muted)' }}>{terjual ? `−${+terjual.toFixed(2)}` : '—'}</td>
+                  <td style={{ ...num, color: sisa < 0 ? 'var(--danger)' : 'inherit' }}>{isNotSet && !terjual ? '—' : +sisa.toFixed(2)}</td>
                 </tr>
               );
             })}

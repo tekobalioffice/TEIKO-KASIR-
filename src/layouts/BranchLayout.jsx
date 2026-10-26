@@ -54,11 +54,6 @@ export default function BranchLayout() {
           <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{currentBranch || '—'}</span>
           <span className="text-muted">|</span>
           <nav style={{ display: 'flex', gap: '0.3rem' }}>
-            <NavLink to="/branch/kasir" style={({ isActive }) => ({
-              padding: '0.35rem 0.75rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem',
-              textDecoration: 'none', color: isActive ? '#fff' : 'var(--text-main)',
-              background: isActive ? 'var(--primary)' : 'transparent',
-            })}>Kasir</NavLink>
             <NavLink to="/branch/pos" style={({ isActive }) => ({
               padding: '0.35rem 0.75rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem',
               textDecoration: 'none', color: isActive ? '#fff' : 'var(--text-main)',
@@ -68,6 +63,17 @@ export default function BranchLayout() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Kasir — di kiri Stok. Halaman Kasir sendiri yang cek shift sudah dibuka di Input Penjualan. */}
+          <NavLink to="/branch/kasir" style={({ isActive }) => ({
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.5rem 0.9rem', border: '1.5px solid var(--primary)', borderRadius: '8px',
+            backgroundColor: isActive ? 'var(--primary)' : 'rgba(52, 199, 89,0.08)',
+            color: isActive ? '#fff' : 'var(--primary)', fontWeight: 700, fontSize: '0.85rem', textDecoration: 'none',
+          })} title="Buka UI Kasir">
+            <Icon name="cart" size={16} />
+            <span>Kasir</span>
+          </NavLink>
+
           {/* Stock Button */}
           <button
             onClick={() => setStockOpen(true)}

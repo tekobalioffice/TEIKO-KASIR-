@@ -108,6 +108,74 @@ export const CUP_SUBTRACTOR_DRINKS = [
   'Green Thai Tea Premi',
 ];
 
+// Menu yang TIDAK pakai cup sendiri (topping rasa ke minuman lain).
+export const NON_CUP_FLAVORS = [
+  'Strawberry', 'Melon', 'Avocado', 'Green Tea', 'Green Tea Latte',
+  'Choco Oreo', 'Taro', 'Hazelnut', 'Brown Sugar', 'Salted Caramel', 'Madu Hutan',
+];
+
+// Varian Premi: field variant, atau variant Standar/kosong + nama berakhiran " Premi".
+export const isPremiVariant = (p) => {
+  const v = (p.variant || 'Standar').toLowerCase();
+  return v.includes('premi') || ((v === 'standar' || !p.variant) && (p.name || '').trim().toLowerCase().endsWith(' premi'));
+};
+
+// Cup yang dipakai 1 porsi menu: 'premi' | 'ori' | null (tidak pakai cup).
+// Aturan sama dengan hitungan Cup Ori/Premi di calculateTotals (BranchPOS.jsx).
+export const cupVariantOf = (p) => {
+  const n = (p.name || '').trim().toLowerCase();
+  const isTopping = (p.category || 'Lainnya') === 'Topping' || ['bubble', 'jelly', 'pudding', 'cao'].some(k => n.includes(k));
+  if (p.category === 'Bahan' || isTopping || p.is_non_base || NON_CUP_FLAVORS.includes(p.name)) return null;
+  return isPremiVariant(p) ? 'premi' : 'ori';
+};
+
+// Menu yang punya stok sendiri per unit (bukan auto-hitung dari bahan / unlimited).
+export const isStockTracked = (p) => !p.is_unlimited && !isAutoCalculatedItem(p.name);
+
+// Resep bahan per 1 porsi (selain cup). Kebalikan persis dari rumus auto-hitung di BranchPOS:
+//   Milk Tea   = Gula Milk Tea terpakai            -> 1 Gula Milk Tea (+ 1 Black Tea, lihat Teh Tarik)
+//   Teh Tarik  = Black Tea terpakai − Milk Tea     -> 1 Black Tea
+//   Full Cream = Diamond × 5 − Coffee Cream (Ori)  -> 1/5 Diamond Besar; Premi = Ultra × 4 -> 1/4 Ultra
+//   Coffee Cream ikut makan 1/5 Diamond Besar.
+// Tiap entri: [nama bahan utama, nama cadangan] — dipakai yang ada di stok cabang.
+const RECIPES = {
+  'Milk Tea': (pr) => [[[`Gula Milk Tea ${pr ? 'Premi' : 'Ori'}`, 'Gula Milk Tea'], 1], [[`Black Tea ${pr ? 'Premi' : 'Ori'}`, 'Black Tea'], 1]],
+  'Teh Tarik': (pr) => [[[`Black Tea ${pr ? 'Premi' : 'Ori'}`, 'Black Tea'], 1]],
+  'Full Cream': (pr) => (pr ? [[['Ultra Milk Besar Premi', 'Ultra Milk Besar'], 0.25]] : [[['Diamond Besar Ori', 'Diamond Besar'], 0.2]]),
+  'Coffee Cream': () => [[['Diamond Besar Ori', 'Diamond Besar'], 0.2]],
+  'Coffe Cream': () => [[['Diamond Besar Ori', 'Diamond Besar'], 0.2]],
+};
+
+// Cup per menu: Hot Series pakai Paper Cup, sisanya Cup (Flat) sesuai varian.
+const cupCandidates = (p, cv) => {
+  if (p.category === 'Hot Series') return ['Paper Cup', 'Cup (Flat) Ori', 'Cup Ori'];
+  return cv === 'premi' ? ['Cup (Flat) Premi', 'Cup Premi'] : ['Cup (Flat) Ori', 'Cup Ori', 'Paper Cup'];
+};
+
+// Stok yang terpakai untuk 1 porsi menu: [{ item, qty }] — item = nama baris branch_inventory.
+// Isi: stok menu itu sendiri (kalau dilacak) + 1 cup + bahan resep. `itemNames` = nama-nama
+// item stok cabang; dipakai buat milih nama bahan yang benar-benar ada (Ori/Premi atau polos).
+export const stockUsageOf = (p, itemNames = []) => {
+  const lower = new Map(itemNames.map(n => [String(n).toLowerCase(), n]));
+  const pick = (cands) => cands.map(c => lower.get(c.toLowerCase())).find(Boolean) || cands[0];
+  const out = [];
+  if (isStockTracked(p)) out.push({ item: getStockKey(p), qty: 1 });
+  const cv = cupVariantOf(p);
+  if (cv) out.push({ item: pick(cupCandidates(p, cv)), qty: 1 });
+  (RECIPES[p.name]?.(isPremiVariant(p)) || []).forEach(([cands, qty]) => out.push({ item: pick(cands), qty }));
+  return out;
+};
+
+// Jumlahkan pemakaian stok dari daftar [{ product, qty }] -> { item_name: qty }.
+export const sumStockUsage = (lines, itemNames = []) => {
+  const used = {};
+  lines.forEach(({ product, qty }) => {
+    if (!product || !qty) return;
+    stockUsageOf(product, itemNames).forEach(u => { used[u.item] = (used[u.item] || 0) + u.qty * qty; });
+  });
+  return used;
+};
+
 export const BUBBLE_PORSI_MAP = {
   'Bubble Besar': 20,
   'Bubble Kecil': 10,

@@ -72,6 +72,10 @@ export default function AdminLayout() {
           <Link to="/admin/riwayat-penjualan" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
             <Icon name="file" size={18} /> Riwayat Penjualan
           </Link>
+
+          <Link to="/admin/transaksi-kasir" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
+            <Icon name="cart" size={18} /> Transaksi Kasir
+          </Link>
           
           <Link to="/admin/stock" onClick={closeSidebar} className="btn-secondary" style={{ justifyContent: 'flex-start', border: 'none' }}>
             <Icon name="package-search" size={18} /> Leaderboard Penjualan
