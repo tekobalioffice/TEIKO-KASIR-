@@ -1039,7 +1039,6 @@ export default function BranchPOS() {
     products.filter(p => p.category !== 'Bahan').forEach(p => stockUsageOf(p, bahanNames).forEach(u => set.add(u.item)));
     return set;
   }, [products]);
-  const manualBahan = products.filter(p => p.category === 'Bahan' && !autoBahanNames.has(p.name));
 
   const getRawMaterialSold = (name) => {
     const prod = products.find(p => p.name === name && p.category === 'Bahan');
@@ -3463,13 +3462,6 @@ export default function BranchPOS() {
       )}
 
       <KasirOmzetBanner branchName={selectedBranch} date={selectedDate} />
-      {isShiftStarted && manualBahan.length > 0 && (
-        <div style={{ padding: '0.6rem 0.9rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem', background: 'rgba(255,149,0,0.08)', border: '1px solid rgba(255,149,0,0.35)', color: '#9a3412' }}>
-          <strong>Wajib isi manual saat opname</strong> — tidak tercatat di Kasir/resep ({manualBahan.length} item, label <em>Isi Manual</em>):{' '}
-          {manualBahan.map(p => p.name).join(', ')}.
-          <div style={{ marginTop: '0.2rem', color: '#7c2d12' }}>Item berlabel <em>Otomatis (Kasir)</em> boleh dikosongkan — Terjual & Sisa dihitung dari Kasir.</div>
-        </div>
-      )}
 
       {/* Shift info banner */}
       <div style={{
