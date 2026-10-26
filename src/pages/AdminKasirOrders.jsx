@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import Receipt from '../components/Receipt';
 
 const CHANNEL_LABEL = { offline: 'Offline', gojek: 'Gojek', grab: 'Grab' };
+const PAY_LABEL = { cash: 'Tunai', qris: 'QRIS', gojek: 'Gojek', grab: 'Grab' };
 const rp = (n) => `Rp ${(Number(n) || 0).toLocaleString('id-ID')}`;
 const todayLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
@@ -39,9 +40,11 @@ export default function AdminKasirOrders() {
   }, [branch, date]);
 
   const loading = loadedKey !== `${branch}|${date}`;
-  const total = orders.reduce((s, o) => s + (o.total || 0), 0);
-  const byChannel = orders.reduce((m, o) => ({ ...m, [o.channel]: (m[o.channel] || 0) + (o.total || 0) }), {});
-  const byShift = orders.reduce((m, o) => ({ ...m, [o.shift || '-']: (m[o.shift || '-'] || 0) + (o.total || 0) }), {});
+  // Transaksi batal tetap ditampilkan (dicoret) tapi tidak ikut total.
+  const valid = orders.filter(o => !o.voided_at);
+  const total = valid.reduce((s, o) => s + (o.total || 0), 0);
+  const byPay = valid.reduce((m, o) => ({ ...m, [o.payment_method || 'cash']: (m[o.payment_method || 'cash'] || 0) + (o.total || 0) }), {});
+  const byShift = valid.reduce((m, o) => ({ ...m, [o.shift || '-']: (m[o.shift || '-'] || 0) + (o.total || 0) }), {});
 
   if (reprint) {
     return (
@@ -66,14 +69,14 @@ export default function AdminKasirOrders() {
         </select>
         <input type="date" className="input-field" style={{ maxWidth: 170, marginBottom: 0 }} value={date} onChange={e => setDate(e.target.value)} />
         <div style={{ marginLeft: 'auto', fontWeight: 800 }}>
-          {orders.length} transaksi · {rp(total)}
+          {valid.length} transaksi · {rp(total)}{orders.length > valid.length ? ` (${orders.length - valid.length} batal)` : ''}
         </div>
       </div>
 
       {!!orders.length && (
         <div className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem', display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
           {Object.entries(byShift).map(([s, t]) => <span key={s}>Shift {s}: <strong>{rp(t)}</strong></span>)}
-          {Object.entries(byChannel).map(([c, t]) => <span key={c}>{CHANNEL_LABEL[c] || c}: <strong>{rp(t)}</strong></span>)}
+          {Object.entries(byPay).map(([c, t]) => <span key={c}>{PAY_LABEL[c] || c}: <strong>{rp(t)}</strong></span>)}
         </div>
       )}
 
@@ -91,11 +94,11 @@ export default function AdminKasirOrders() {
             ) : !orders.length ? (
               <tr><td colSpan={10} className="text-center text-muted py-8">Belum ada transaksi Kasir di tanggal ini.</td></tr>
             ) : orders.map(o => (
-              <tr key={o.id}>
+              <tr key={o.id} style={o.voided_at ? { opacity: 0.55, textDecoration: 'line-through' } : undefined} title={o.voided_at ? `Dibatalkan oleh ${o.voided_by}: ${o.void_reason}` : undefined}>
                 <td>{new Date(o.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
                 <td style={{ fontFamily: 'monospace' }}>{String(o.id).slice(0, 8).toUpperCase()}</td>
                 <td>{o.shift || '-'}</td>
-                <td>{CHANNEL_LABEL[o.channel] || o.channel}</td>
+                <td>{CHANNEL_LABEL[o.channel] || o.channel}{o.payment_method === 'qris' ? ' · QRIS' : ''}{o.voided_at ? <div style={{ color: 'var(--danger)', fontSize: '0.75rem', textDecoration: 'none' }}>BATAL: {o.void_reason}</div> : null}</td>
                 <td>{o.staff_name || '-'}</td>
                 <td style={{ fontSize: '0.85rem' }}>
                   {(o.order_items || []).map((it, i) => (
@@ -106,8 +109,8 @@ export default function AdminKasirOrders() {
                   ))}
                 </td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{rp(o.total)}</td>
-                <td style={{ textAlign: 'right' }}>{o.channel === 'offline' && o.paid_amount != null ? rp(o.paid_amount) : '-'}</td>
-                <td style={{ textAlign: 'right' }}>{o.channel === 'offline' && o.paid_amount != null ? rp(Math.max(0, o.paid_amount - o.total)) : '-'}</td>
+                <td style={{ textAlign: 'right' }}>{(o.payment_method || 'cash') === 'cash' && o.channel === 'offline' && o.paid_amount != null ? rp(o.paid_amount) : '-'}</td>
+                <td style={{ textAlign: 'right' }}>{(o.payment_method || 'cash') === 'cash' && o.channel === 'offline' && o.paid_amount != null ? rp(Math.max(0, o.paid_amount - o.total)) : '-'}</td>
                 <td><button className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setReprint(o)}>Struk</button></td>
               </tr>
             ))}

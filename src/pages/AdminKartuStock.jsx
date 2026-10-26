@@ -10,7 +10,7 @@ async function fetchKasirPending(branchName, invItems) {
   const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
   const [{ data: orders }, { data: reports }, { data: products }] = await Promise.all([
     supabase.from('orders').select('report_date, shift, order_items(product_id, qty)')
-      .eq('branch_name', branchName).gte('report_date', since),
+      .eq('branch_name', branchName).gte('report_date', since).is('voided_at', null),
     supabase.from('sales_reports').select('date, shift').eq('branch_name', branchName).gte('date', since),
     supabase.from('products').select('id, name, variant, category, is_unlimited, is_non_base'),
   ]);

@@ -7,13 +7,15 @@ import { exportShiftToExcel } from '../utils/exportExcel';
 import { supabase } from '../supabase';
 import BranchStockDrawer from '../components/BranchStockDrawer';
 import KasirOmzetBanner from '../components/KasirOmzetBanner';
-import { parseQty, formatFraction, STOCK_KEY_MAP, CUP_SUBTRACTOR_DRINKS, getStockKey, getDetailKey, getPorsiWindowStart, sumStockUsage } from '../utils/stockUtils';
+import { parseQty, formatFraction, STOCK_KEY_MAP, CUP_SUBTRACTOR_DRINKS, getStockKey, getDetailKey, getPorsiWindowStart, sumStockUsage, stockUsageOf } from '../utils/stockUtils';
 import { isStaleBuild } from '../utils/appVersion';
 
 // Semua konstanta dan helper sudah diimport dari stockUtils.js
 
 // Satu dialog sesi-basi sekaligus (restore, cek visibility & scan cadangan bisa nembak barengan).
 let staleBusy = false;
+
+const KASIR_NONCASH = [['qris', 'Non-tunai Kasir: QRIS'], ['gojek', 'Non-tunai Kasir: Gojek'], ['grab', 'Non-tunai Kasir: Grab']];
 
 export default function BranchPOS() {
   const { userData } = useAuth();
@@ -159,6 +161,7 @@ export default function BranchPOS() {
   const [s2KemarinPending, setS2KemarinPending] = useState(null); // tanggal kemarin kalau Shift 2-nya belum ditutup
   const [ultraInDiamond, setUltraInDiamond] = useState(0); // salinan ref buat tampilan
   const [kasirSoldMap, setKasirSoldMap] = useState({}); // product_id -> qty terjual lewat Kasir shift ini
+  const [kasirNonCash, setKasirNonCash] = useState({}); // 'qris' | 'gojek' | 'grab' -> Rp (tidak masuk laci)
   const kasirLoadRef = useRef(null); // muat ulang jualan Kasir (dipanggil juga sebelum Tutup Shift)
   const ultraInDiamondRef = useRef(0); // kotak Diamond Besar yg asalnya dari Ultra (catatan Form Stok), diisi fetchInventory
   const autoS2Branch = useRef(null); // auto-arahkan ke S2 kemarin cukup sekali per cabang
@@ -971,6 +974,19 @@ export default function BranchPOS() {
   const handleAddExpense = () =>
     setExpenses(prev => [...prev, { id: Date.now(), name: '', amount: '' }]);
 
+  // QRIS / Gojek / Grab dari Kasir = uang yang TIDAK masuk laci. Dicatat otomatis sebagai baris
+  // Pengeluaran (terkunci) supaya "Seharusnya Disetor" = tunai saja; ikut ter-update tiap data Kasir dimuat.
+  useEffect(() => {
+    const names = KASIR_NONCASH.map(([, n]) => n);
+    setExpenses(prev => {
+      const kept = prev.filter(e => !names.includes(e.name));
+      const auto = KASIR_NONCASH.filter(([k]) => kasirNonCash[k] > 0)
+        .map(([k, name]) => ({ id: `kasir_${k}`, name, amount: String(kasirNonCash[k]), auto: true }));
+      const next = [...kept, ...auto];
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, [kasirNonCash, expenses]);
+
   const handleExpenseChange = (id, field, value) =>
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
 
@@ -1015,6 +1031,15 @@ export default function BranchPOS() {
   ), [products, kasirSoldMap]);
   // Jumlah dari Kasir untuk satu baris form: menu = jualan, bahan = terpakai.
   const kasirQtyFor = (prod) => (prod.category === 'Bahan' ? kasirBahanUsed[prod.name] : kasirSoldMap[prod.id]) || 0;
+  // Bahan yang ikut terhitung dari Kasir (cup + resep). Bahan lain (Gula 1/2, Premium Tea, sedotan,
+  // tutup, tisu, dll) TIDAK tercatat Kasir -> Sisa-nya wajib diisi manual saat opname.
+  const autoBahanNames = useMemo(() => {
+    const bahanNames = products.filter(p => p.category === 'Bahan').map(p => p.name);
+    const set = new Set();
+    products.filter(p => p.category !== 'Bahan').forEach(p => stockUsageOf(p, bahanNames).forEach(u => set.add(u.item)));
+    return set;
+  }, [products]);
+  const manualBahan = products.filter(p => p.category === 'Bahan' && !autoBahanNames.has(p.name));
 
   const getRawMaterialSold = (name) => {
     const prod = products.find(p => p.name === name && p.category === 'Bahan');
@@ -1168,14 +1193,23 @@ export default function BranchPOS() {
   // Kasir TIDAK motong display_qty; jualannya dihitung di sini sebagai Terjual otomatis, dan
   // Tutup Shift yang motong stok (live - terjual) seperti biasa — jadi tidak kepotong 2x.
   useEffect(() => {
-    if (!isShiftStarted || !selectedBranch || !shift) { setKasirSoldMap({}); return; }
+    if (!isShiftStarted || !selectedBranch || !shift) { setKasirSoldMap({}); setKasirNonCash({}); return; }
     let cancelled = false;
     const load = async () => {
-      const { data, error } = await supabase.from('order_items')
-        .select('product_id, qty, orders!inner(branch_name, report_date, shift)')
-        .eq('orders.branch_name', selectedBranch).eq('orders.report_date', selectedDate).eq('orders.shift', String(shift));
+      // Transaksi yang dibatalkan (voided_at) tidak dihitung.
+      const [{ data, error }, { data: ords }] = await Promise.all([
+        supabase.from('order_items')
+          .select('product_id, qty, orders!inner(branch_name, report_date, shift, voided_at)')
+          .eq('orders.branch_name', selectedBranch).eq('orders.report_date', selectedDate).eq('orders.shift', String(shift))
+          .is('orders.voided_at', null),
+        supabase.from('orders').select('total, payment_method')
+          .eq('branch_name', selectedBranch).eq('report_date', selectedDate).eq('shift', String(shift)).is('voided_at', null),
+      ]);
       if (cancelled) return;
       if (error) { console.error('Gagal ambil penjualan Kasir:', error); return; }
+      const nonCash = {};
+      (ords || []).forEach(o => { if (o.payment_method && o.payment_method !== 'cash') nonCash[o.payment_method] = (nonCash[o.payment_method] || 0) + (o.total || 0); });
+      setKasirNonCash(nonCash);
       const map = {};
       (data || []).forEach(r => { if (r.product_id) map[r.product_id] = (map[r.product_id] || 0) + (r.qty || 0); });
       setKasirSoldMap(map);
@@ -3429,6 +3463,13 @@ export default function BranchPOS() {
       )}
 
       <KasirOmzetBanner branchName={selectedBranch} date={selectedDate} />
+      {isShiftStarted && manualBahan.length > 0 && (
+        <div style={{ padding: '0.6rem 0.9rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem', background: 'rgba(255,149,0,0.08)', border: '1px solid rgba(255,149,0,0.35)', color: '#9a3412' }}>
+          <strong>Wajib isi manual saat opname</strong> — tidak tercatat di Kasir/resep ({manualBahan.length} item, label <em>Isi Manual</em>):{' '}
+          {manualBahan.map(p => p.name).join(', ')}.
+          <div style={{ marginTop: '0.2rem', color: '#7c2d12' }}>Item berlabel <em>Otomatis (Kasir)</em> boleh dikosongkan — Terjual & Sisa dihitung dari Kasir.</div>
+        </div>
+      )}
 
       {/* Shift info banner */}
       <div style={{
@@ -3620,6 +3661,9 @@ export default function BranchPOS() {
                               </span>
                             )}
                             <span style={{ flex: 1 }}>{itemName}</span>
+                            {(!isBahan || autoBahanNames.has(itemName))
+                              ? <span title="Terjual dihitung otomatis dari transaksi Kasir" style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.1rem 0.4rem', borderRadius: '5px', background: 'rgba(52,199,89,0.15)', color: '#096C46' }}>Otomatis (Kasir)</span>
+                              : <span title="Tidak tercatat di Kasir / resep — isi Sisa manual saat opname" style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.1rem 0.4rem', borderRadius: '5px', background: 'rgba(255,149,0,0.18)', color: '#c2410c' }}>Isi Manual</span>}
                           </div>
 
                           {/* Variant/Item Rows */}
@@ -3885,8 +3929,8 @@ export default function BranchPOS() {
               </div>
               {expenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <input type="text" className="input-field" placeholder="Keterangan" value={exp.name} onChange={e => handleExpenseChange(exp.id, 'name', e.target.value)} style={{ flex: 2 }} />
-                  <input type="number" className="input-field" placeholder="Rp" value={exp.amount} onChange={e => handleExpenseChange(exp.id, 'amount', e.target.value)} style={{ flex: 1 }} />
+                  <input type="text" className="input-field" placeholder="Keterangan" value={exp.name} readOnly={exp.auto} title={exp.auto ? 'Otomatis dari Kasir (non-tunai, tidak masuk laci)' : undefined} onChange={e => handleExpenseChange(exp.id, 'name', e.target.value)} style={{ flex: 2, ...(exp.auto ? { background: 'rgba(13,111,255,0.06)', fontWeight: 700 } : {}) }} />
+                  <input type="number" className="input-field" placeholder="Rp" value={exp.amount} readOnly={exp.auto} onChange={e => handleExpenseChange(exp.id, 'amount', e.target.value)} style={{ flex: 1, ...(exp.auto ? { background: 'rgba(13,111,255,0.06)', fontWeight: 700 } : {}) }} />
                 </div>
               ))}
             </div>

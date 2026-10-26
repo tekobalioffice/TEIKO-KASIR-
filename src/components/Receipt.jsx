@@ -54,7 +54,12 @@ export function ReceiptPaper({ order, branchName, settings }) {
         <span>TOTAL</span>
         <span>Rp {total.toLocaleString('id-ID')}</span>
       </div>
-      {order.channel === 'offline' && order.paid_amount != null && (
+      {order.payment_method && order.payment_method !== 'cash' && (
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Bayar</span><span>{{ qris: 'QRIS', gojek: 'Gojek', grab: 'Grab' }[order.payment_method] || order.payment_method}</span>
+        </div>
+      )}
+      {order.channel === 'offline' && (order.payment_method || 'cash') === 'cash' && order.paid_amount != null && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Tunai</span><span>Rp {order.paid_amount.toLocaleString('id-ID')}</span>

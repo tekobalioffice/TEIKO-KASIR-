@@ -28,7 +28,8 @@ async function fetchStockState(branch, sess, products) {
   const [{ data: inv }, { data: sold }] = await Promise.all([
     supabase.from('branch_inventory').select('item_name, display_qty, tambah_qty').eq('branch_name', branch),
     supabase.from('order_items').select('product_id, qty, orders!inner(branch_name, report_date, shift)')
-      .eq('orders.branch_name', branch).eq('orders.report_date', sess.date).eq('orders.shift', String(sess.shift)),
+      .eq('orders.branch_name', branch).eq('orders.report_date', sess.date).eq('orders.shift', String(sess.shift))
+      .is('orders.voided_at', null),
   ]);
   const invMap = {};
   (inv || []).forEach(r => { invMap[r.item_name] = (Number(r.display_qty) || 0) + (Number(r.tambah_qty) || 0); });
@@ -56,6 +57,7 @@ const baseOf = (p, products) => {
 };
 
 const EPS = 1e-9;
+const PAY_LABEL = { cash: 'Tunai', qris: 'QRIS', gojek: 'Gojek', grab: 'Grab' };
 
 function VariantBadge({ product }) {
   const v = product?.variant;
@@ -114,6 +116,7 @@ export default function BranchKasir() {
   const [saving, setSaving] = useState(false);
   const [lastOrder, setLastOrder] = useState(null); // struk transaksi terakhir, tampil di kolom kanan
   const [paid, setPaid] = useState(''); // uang dari customer (Offline/tunai)
+  const [payMethod, setPayMethod] = useState('cash'); // Offline: 'cash' | 'qris'
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]); // order shift ini, terbaru dulu
   const loadHistory = async () => {
@@ -123,6 +126,20 @@ export default function BranchKasir() {
       .eq('branch_name', sess.branch).eq('report_date', sess.date).eq('shift', String(sess.shift))
       .order('created_at', { ascending: false });
     setHistory(data || []);
+  };
+  // Batalkan transaksi (salah input / customer batal). Tidak dihapus — ditandai batal + alasan,
+  // dan cuma selama shift-nya belum ditutup (sesudah tutup, stok & laporan sudah final -> Koreksi Laporan).
+  const voidOrder = async (o) => {
+    const { data: closedRep } = await supabase.from('sales_reports').select('id')
+      .eq('branch_name', o.branch_name).eq('date', o.report_date).eq('shift', String(o.shift)).limit(1);
+    if (closedRep?.length) { alert('Shift transaksi ini sudah ditutup — tidak bisa dibatalkan dari Kasir. Pakai Koreksi Laporan (admin).'); return; }
+    const reason = (window.prompt(`Batalkan transaksi ${String(o.id).slice(0, 8).toUpperCase()} (Rp ${(o.total || 0).toLocaleString('id-ID')})?\nTulis alasannya:`) || '').trim();
+    if (!reason) return;
+    const { error } = await supabase.from('orders')
+      .update({ voided_at: new Date().toISOString(), void_reason: reason, voided_by: userData?.name || 'Kasir' }).eq('id', o.id);
+    if (error) { alert(`Gagal membatalkan:\n${error.message}`); return; }
+    loadHistory();
+    refreshStock();
   };
   // Baris Rp 0 = minuman dasar menu rasa (Full Cream di balik Strawberry) — tidak ditampilkan ke kasir.
   const visibleItems = (o) => (o.order_items || []).filter(it => it.price > 0)
@@ -244,8 +261,10 @@ export default function BranchKasir() {
 
   const lineUnit = (it) => it.price + (it.base_price || 0);
   const total = cart.reduce((sum, it) => sum + lineUnit(it) * it.qty, 0);
-  // Gojek/Grab dibayar lewat aplikasi — tidak ada uang tunai & kembalian.
-  const isCash = channel === 'offline';
+  // Tunai = cuma Offline + bayar cash. QRIS / Gojek / Grab tidak masuk laci -> tanpa kembalian,
+  // dan otomatis jadi baris "non-tunai" di Pengeluaran Input Penjualan (setoran = tunai saja).
+  const isCash = channel === 'offline' && payMethod === 'cash';
+  const paymentMethod = channel === 'offline' ? payMethod : channel;
   const paidNum = parseInt(String(paid).replace(/\D/g, ''), 10) || 0;
   const change = paidNum - total;
 
@@ -298,6 +317,7 @@ export default function BranchKasir() {
         shift: String(sess.shift),
         report_date: sess.date,
         paid_amount: isCash ? paidNum : total,
+        payment_method: paymentMethod,
       }]).select().single();
       if (orderErr) throw orderErr;
       orderId = order.id;
@@ -320,11 +340,12 @@ export default function BranchKasir() {
       loadHistory();
       setCart([]);
       setPaid('');
+      setPayMethod('cash');
       refreshStock(); // stok di kartu langsung ikut transaksi barusan
     } catch (e) {
       console.error(e);
-      // Order tanpa item = total nyasar di laporan. Hapus biar bisa diulang bersih.
-      if (orderId) await supabase.from('orders').delete().eq('id', orderId);
+      // Order tanpa item = total nyasar di laporan. Tandai batal (staf tidak boleh hapus).
+      if (orderId) await supabase.from('orders').update({ voided_at: new Date().toISOString(), void_reason: 'Gagal simpan item (otomatis)', voided_by: 'Sistem' }).eq('id', orderId);
       alert(`Gagal simpan transaksi:\n${e.message || JSON.stringify(e)}`);
     } finally {
       setSaving(false);
@@ -434,20 +455,27 @@ export default function BranchKasir() {
       <div className="glass-panel" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0.9rem', position: 'sticky', top: '1rem', maxHeight: '80vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, marginBottom: '0.5rem' }}>
           <span>Riwayat Shift {activeSession.shift}</span>
-          <span>{history.length} trx · Rp {history.reduce((s, o) => s + (o.total || 0), 0).toLocaleString('id-ID')}</span>
+          <span>{history.filter(o => !o.voided_at).length} trx · Rp {history.filter(o => !o.voided_at).reduce((s, o) => s + (o.total || 0), 0).toLocaleString('id-ID')}</span>
         </div>
         {!history.length && <div className="text-muted" style={{ fontSize: '0.8rem' }}>Belum ada transaksi di shift ini.</div>}
         {history.map(o => (
-          <div key={o.id} style={{ borderTop: '1px dashed var(--border-color)', padding: '0.5rem 0', fontSize: '0.78rem' }}>
+          <div key={o.id} style={{ borderTop: '1px dashed var(--border-color)', padding: '0.5rem 0', fontSize: '0.78rem', opacity: o.voided_at ? 0.55 : 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
               <span>{new Date(o.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {String(o.id).slice(0, 8).toUpperCase()}</span>
-              <span>Rp {(o.total || 0).toLocaleString('id-ID')}</span>
+              <span style={{ textDecoration: o.voided_at ? 'line-through' : 'none' }}>Rp {(o.total || 0).toLocaleString('id-ID')}</span>
             </div>
-            <div className="text-muted">{o.channel !== 'offline' ? o.channel.toUpperCase() + ' · ' : ''}{visibleItems(o).map(it => `${it.qty}× ${it.name}${it.variant && it.variant !== 'Standar' ? ' ' + it.variant : ''}`).join(', ')}</div>
+            {o.voided_at && <div style={{ color: 'var(--danger)', fontWeight: 700 }}>DIBATALKAN — {o.void_reason} ({o.voided_by})</div>}
+            <div className="text-muted">{PAY_LABEL[o.payment_method] || ''} · {visibleItems(o).map(it => `${it.qty}× ${it.name}${it.variant && it.variant !== 'Standar' ? ' ' + it.variant : ''}`).join(', ')}</div>
             <button type="button" onClick={() => { setLastOrder({ ...o, items: visibleItems(o), _reprint: true }); setShowHistory(false); }}
               style={{ marginTop: '0.25rem', padding: '0.15rem 0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}>
               Lihat / Cetak Struk
             </button>
+            {!o.voided_at && (
+              <button type="button" onClick={() => voidOrder(o)}
+                style={{ marginTop: '0.25rem', marginLeft: '0.3rem', padding: '0.15rem 0.5rem', borderRadius: '6px', border: '1px solid var(--danger)', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}>
+                Batalkan
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -491,6 +519,23 @@ export default function BranchKasir() {
           <span>Total</span>
           <span>Rp {total.toLocaleString('id-ID')}</span>
         </div>
+
+        {channel === 'offline' && (
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {[['cash', 'Tunai'], ['qris', 'QRIS']].map(([id, label]) => (
+              <button key={id} type="button" onClick={() => setPayMethod(id)} style={{
+                flex: 1, padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', cursor: 'pointer',
+                fontSize: '0.8rem', fontWeight: 800,
+                background: payMethod === id ? 'var(--primary)' : 'transparent', color: payMethod === id ? '#fff' : 'var(--text-main)',
+              }}>{label}</button>
+            ))}
+          </div>
+        )}
+        {channel === 'offline' && payMethod === 'qris' && (
+          <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+            Pastikan QRIS sudah masuk sebelum klik Bayar. Tercatat non-tunai (tidak masuk setoran laci).
+          </div>
+        )}
 
         {isCash && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
