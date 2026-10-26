@@ -15,7 +15,7 @@ import { isStaleBuild } from '../utils/appVersion';
 // Satu dialog sesi-basi sekaligus (restore, cek visibility & scan cadangan bisa nembak barengan).
 let staleBusy = false;
 
-const KASIR_NONCASH = [['qris', 'Non-tunai Kasir: QRIS'], ['gojek', 'Non-tunai Kasir: Gojek'], ['grab', 'Non-tunai Kasir: Grab']];
+const KASIR_NONCASH = [['qris', 'QRIS'], ['gojek', 'Gojek'], ['grab', 'Grab']];
 
 export default function BranchPOS() {
   const { userData } = useAuth();
@@ -3921,8 +3921,8 @@ export default function BranchPOS() {
               </div>
               {expenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <input type="text" className="input-field" placeholder="Keterangan" value={exp.name} readOnly={exp.auto} title={exp.auto ? 'Otomatis dari Kasir (non-tunai, tidak masuk laci)' : undefined} onChange={e => handleExpenseChange(exp.id, 'name', e.target.value)} style={{ flex: 2, ...(exp.auto ? { background: 'rgba(13,111,255,0.06)', fontWeight: 700 } : {}) }} />
-                  <input type="number" className="input-field" placeholder="Rp" value={exp.amount} readOnly={exp.auto} onChange={e => handleExpenseChange(exp.id, 'amount', e.target.value)} style={{ flex: 1, ...(exp.auto ? { background: 'rgba(13,111,255,0.06)', fontWeight: 700 } : {}) }} />
+                  <input type="text" className="input-field" placeholder="Keterangan" value={exp.name} readOnly={exp.auto} title={exp.auto ? 'Otomatis dari Kasir (non-tunai, tidak masuk laci)' : undefined} onChange={e => handleExpenseChange(exp.id, 'name', e.target.value)} style={{ flex: 2 }} />
+                  <input type="number" className="input-field" placeholder="Rp" value={exp.amount} readOnly={exp.auto} onChange={e => handleExpenseChange(exp.id, 'amount', e.target.value)} style={{ flex: 1 }} />
                 </div>
               ))}
             </div>
